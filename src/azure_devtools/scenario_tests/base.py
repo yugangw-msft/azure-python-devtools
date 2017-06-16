@@ -15,7 +15,7 @@ import vcr
 
 from .config import TestConfig
 from .const import ENV_TEST_DIAGNOSE
-from .utilities import create_random_name
+from .utilities import create_random_name, get_resource_name, get_qualified_test_name
 from .decorators import live_only
 
 logger = logging.getLogger('azure_devtools.scenario_tests')
@@ -93,6 +93,8 @@ class ReplayableTest(IntegrationTestBase):  # pylint: disable=too-many-instance-
                  recording_patches=None, replay_patches=None):
         super(ReplayableTest, self).__init__(method_name)
 
+        self.qualified_test_name = get_qualified_test_name(self, method_name)
+
         self.recording_processors = recording_processors or []
         self.replay_processors = replay_processors or []
 
@@ -147,6 +149,9 @@ class ReplayableTest(IntegrationTestBase):  # pylint: disable=too-many-instance-
 
     def tearDown(self):
         os.environ = self.original_env
+
+    def create_random_name(self, prefix, length):
+        return get_resource_name(prefix, self.qualified_test_name.encode())
 
     def _process_request_recording(self, request):
         if self.disable_recording:
