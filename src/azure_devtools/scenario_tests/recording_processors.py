@@ -25,13 +25,14 @@ class RecordingProcessor(object):
 
 
 class SubscriptionRecordingProcessor(RecordingProcessor):
-    def __init__(self, replacement):
+    def __init__(self, replacement, binary_payload_headers=None):
         self._replacement = replacement
+        self._binary_payload_headers = binary_payload_headers or []
 
     def process_request(self, request):
         request.uri = self._replace_subscription_id(request.uri)
 
-        if request.body:
+        if request.body and not ([x for x in self._binary_payload_headers if x in str(request.headers['Content-Type'])]):
             request.body = self._replace_subscription_id(request.body.decode()).encode()
 
         return request

@@ -85,7 +85,7 @@ class ReplayableTest(IntegrationTestBase):  # pylint: disable=too-many-instance-
 
     def __init__(self,  # pylint: disable=too-many-arguments
                  method_name, config_file=None, recording_dir=None, recording_name=None, recording_processors=None,
-                 replay_processors=None, recording_patches=None, replay_patches=None):
+                 replay_processors=None, recording_patches=None, replay_patches=None, binary_payload_headers=None):
         super(ReplayableTest, self).__init__(method_name)
 
         self.recording_processors = recording_processors or []
@@ -123,6 +123,8 @@ class ReplayableTest(IntegrationTestBase):  # pylint: disable=too-many-instance-
         self.test_resources_count = 0
         self.original_env = os.environ.copy()
 
+        self.binary_payload_headers = binary_payload_headers or []
+
     def setUp(self):
         super(ReplayableTest, self).setUp()
 
@@ -130,6 +132,12 @@ class ReplayableTest(IntegrationTestBase):  # pylint: disable=too-many-instance-
         cm = self.vcr.use_cassette(self.recording_file)
         self.cassette = cm.__enter__()
         self.addCleanup(cm.__exit__)
+
+        # setup binary payload
+        if self.binary_payload_headers:
+            for r in self.cassette.responses:
+                if self._has_binary_payload(r['headers'].get('content-type')):
+                    r['body']['string'] = self._restore_binary_payload(r['body']['string'])
 
         # set up mock patches
         if self.in_recording:
@@ -143,6 +151,7 @@ class ReplayableTest(IntegrationTestBase):  # pylint: disable=too-many-instance-
         os.environ = self.original_env
         assert not [t for t in threading.enumerate() if t.name.startswith("AzureOperationPoller")], \
             "You need to call 'result' or 'wait' on all AzureOperationPoller you have created"
+
 
     def _process_request_recording(self, request):
         if self.disable_recording:
@@ -173,6 +182,10 @@ class ReplayableTest(IntegrationTestBase):  # pylint: disable=too-many-instance-
             body = response['body']['string']
             if body and not isinstance(body, six.string_types):
                 response['body']['string'] = body.decode('utf-8')
+
+            if body and self.binary_payload_headers and self._has_binary_payload(response['headers']['content-type']):
+                response['body']['string'] = self._normalize_binary_payload(body)
+
 
             for processor in self.recording_processors:
                 response = processor.process_response(response)
@@ -206,3 +219,17 @@ class ReplayableTest(IntegrationTestBase):  # pylint: disable=too-many-instance-
                 return False
 
         return True
+
+    @classmethod
+    def _restore_binary_payload(cls, body):
+        return body.decode('utf8').encode('latin1')
+
+    @classmethod
+    def _normalize_binary_payload(cls, body):
+        # Pick latin1 as it can deal with any random data
+        # https://stackoverflow.com/questions/22621143/serializing-binary-data-in-python 
+        return body.decode('latin1')
+
+    def _has_binary_payload(self, content_headers):
+        content_headers = str(content_headers)
+        return bool([x for x in self.binary_payload_headers if x in content_headers])
