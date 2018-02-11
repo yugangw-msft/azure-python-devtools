@@ -78,16 +78,15 @@ class LargeRequestBodyProcessor(RecordingProcessor):
 class LargeResponseBodyProcessor(RecordingProcessor):
     control_flag = '<CTRL-REPLACE>'
 
-    def __init__(self, max_response_body=128):
-        self._max_response_body = max_response_body
+    def __init__(self, max_response_body=None):
+        self._max_response_body = max_response_body or 1024
 
     def process_response(self, response):
         length = len(response['body']['string'] or '')
         if length > self._max_response_body * 1024:
-            response['body']['string'] = \
-                "!!! The response body has been omitted from the recording because it is larger " \
-                "than {} KB. It will be replaced with blank content of {} bytes while replay. " \
-                "{}{}".format(self._max_response_body, length, self.control_flag, length)
+            raise ValueError(
+                "The response body can't be recorded because it is larger than {} KB. Please configure higher "
+                "limits when initializae your tests case".format(self._max_response_body))
 
         return response
 
